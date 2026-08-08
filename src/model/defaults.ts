@@ -1,11 +1,45 @@
 import type { Project, Source, Surface, Vec2 } from './types';
 import { SLOW_DRIFT } from '../content/shaders';
+import { parseParamSpecs, specDefaults } from './annotations';
 
 export function newId(prefix: string): string {
   const hex = Math.floor(Math.random() * 0xffffffff)
     .toString(16)
     .padStart(8, '0');
   return `${prefix}_${hex.slice(0, 6)}`;
+}
+
+export function createShaderSource(name: string, glsl: string): Source {
+  return {
+    id: newId('src'),
+    type: 'shader',
+    name,
+    glsl,
+    uniforms: specDefaults(parseParamSpecs(glsl)),
+  };
+}
+
+export function createSurface(name: string, sourceId: string | null): Surface {
+  return {
+    id: newId('srf'),
+    name,
+    enabled: true,
+    solo: false,
+    opacity: 1,
+    blendMode: 'normal',
+    warp: {
+      type: 'cornerPin',
+      corners: [
+        [0.3, 0.3],
+        [0.7, 0.3],
+        [0.7, 0.7],
+        [0.3, 0.7],
+      ],
+    },
+    mask: { enabled: false, polygons: [], feather: 0.02 },
+    sourceId,
+    sourceParams: {},
+  };
 }
 
 export function defaultProject(): Project {
@@ -125,6 +159,7 @@ function normalizeSource(raw: unknown, index: number): Source {
     name: typeof s.name === 'string' ? s.name : `Source ${index + 1}`,
     glsl: typeof s.glsl === 'string' ? s.glsl : undefined,
     uniforms: s.uniforms && typeof s.uniforms === 'object' ? s.uniforms : {},
+    mediaId: typeof s.mediaId === 'string' ? s.mediaId : undefined,
   };
 }
 

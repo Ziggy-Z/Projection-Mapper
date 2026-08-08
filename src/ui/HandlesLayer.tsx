@@ -11,8 +11,10 @@ import { useWindowSize } from './hooks';
 export function HandlesLayer(): React.ReactElement | null {
   const surfaces = useAppStore((s) => s.project.surfaces);
   const visible = useAppStore((s) => s.handlesVisible);
+  const maskEditing = useAppStore((s) => s.maskEdit != null);
   const size = useWindowSize();
-  if (!visible) return null;
+  // Mask editing is a distinct sub-mode: warp handles get out of the way.
+  if (!visible || maskEditing) return null;
   return (
     <svg
       className="handles"

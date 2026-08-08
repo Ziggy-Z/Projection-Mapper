@@ -1,12 +1,27 @@
-import type { OverlayMode, Project, Source, SourceParamValue, Surface } from '../model/types';
+import type {
+  BlendMode,
+  OverlayMode,
+  Project,
+  Source,
+  SourceParamValue,
+  Surface,
+} from '../model/types';
+import { getMedia } from '../store/media';
+import { GRADIENT_BODY, SOLID_BODY } from '../content/shaders';
 import { Fbo } from './fbo';
 import { cornerPinVertices } from './homography';
 import { Program } from './program';
 import {
+  BLIT_FS,
   CHECKER_FS,
+  FILL_FS,
   FULLSCREEN_VS,
   GRID_FS,
   MASTER_FS,
+  MAX_MASK_POINTS,
+  MAX_MASK_POLYS,
+  OUTLINE_SRC_FS,
+  SAFE_FS,
   SOURCE_HEADER,
   WARP_FS,
   WARP_VS,
@@ -28,6 +43,13 @@ export interface RenderStats {
   frameMs: number;
   fps: number;
   contextLost: boolean;
+  /** Total watchdog events since boot. */
+  dropEvents: number;
+}
+
+export interface WatchdogEntry {
+  at: string;
+  ms: number;
 }
 
 interface SurfaceRes {
@@ -42,12 +64,35 @@ interface SourceRes {
   error: string | null;
 }
 
+interface MediaRes {
+  texture: WebGLTexture | null;
+  video: HTMLVideoElement | null;
+  objectUrl: string | null;
+  ready: boolean;
+  failed: boolean;
+  lastUsedFrame: number;
+}
+
 const QUAD_INDICES = new Uint16Array([0, 1, 2, 0, 2, 3]);
 const FS_TRIANGLE = new Float32Array([-1, -1, 3, -1, -1, 3]);
 const BLACKOUT_FADE_SEC = 0.15;
+const WATCHDOG_LIMIT = 200;
+/** Identification hues for the per-surface fill overlay. */
+const FILL_COLORS: [number, number, number][] = [
+  [0.95, 0.66, 0.23], // tungsten
+  [0.31, 0.82, 0.88], // cyan
+  [0.85, 0.4, 0.75],
+  [0.45, 0.85, 0.45],
+  [0.9, 0.45, 0.35],
+  [0.55, 0.55, 0.95],
+  [0.9, 0.85, 0.4],
+  [0.5, 0.8, 0.7],
+];
 
 export class Renderer {
-  readonly stats: RenderStats = { frameMs: 16.7, fps: 60, contextLost: false };
+  readonly stats: RenderStats = { frameMs: 16.7, fps: 60, contextLost: false, dropEvents: 0 };
+  /** Rolling log of sustained frame drops. Reports; never intervenes. */
+  readonly watchdogLog: WatchdogEntry[] = [];
 
   private gl: WebGL2RenderingContext;
   private raf = 0;
@@ -57,17 +102,27 @@ export class Renderer {
   private lastT = 0;
   private fade = 1;
   private random: [number, number, number, number];
+  private slowSince = 0;
+  private lastDropLog = 0;
 
   private warpProg!: Program;
   private masterProg!: Program;
   private checkerProg!: Program;
   private gridProg!: Program;
+  private fillProg!: Program;
+  private outlineProg!: Program;
+  private blitProg!: Program;
+  private safeProg!: Program;
   private fsTriVao!: WebGLVertexArrayObject;
   private fsTriVbo!: WebGLBuffer;
   private quadIndexBuf!: WebGLBuffer;
   private outputFbo!: Fbo;
   private surfaceRes = new Map<string, SurfaceRes>();
   private sourceRes = new Map<string, SourceRes>();
+  private mediaRes = new Map<string, MediaRes>();
+  private maskPts = new Float32Array(MAX_MASK_POINTS * 2);
+  private maskRange = new Int32Array(MAX_MASK_POLYS * 2);
+  private maskInvert = new Int32Array(MAX_MASK_POLYS);
 
   private onLost = (e: Event): void => {
     e.preventDefault();
@@ -118,6 +173,11 @@ export class Renderer {
     this.releaseAll();
   }
 
+  /** Compile error for a source, or null. For the shader editor. */
+  getSourceError(sourceId: string): string | null {
+    return this.sourceRes.get(sourceId)?.error ?? null;
+  }
+
   /** Simulates a GPU reset (acceptance test 6). */
   debugLoseContext(restoreAfterMs = 1500): void {
     const ext = this.gl.getExtension('WEBGL_lose_context');
@@ -135,11 +195,17 @@ export class Renderer {
     const gl = this.gl;
     this.surfaceRes.clear();
     this.sourceRes.clear();
+    for (const m of this.mediaRes.values()) this.releaseMedia(m, false);
+    this.mediaRes.clear();
 
     this.warpProg = new Program(gl, WARP_VS, WARP_FS);
     this.masterProg = new Program(gl, FULLSCREEN_VS, MASTER_FS);
     this.checkerProg = new Program(gl, FULLSCREEN_VS, CHECKER_FS);
     this.gridProg = new Program(gl, FULLSCREEN_VS, GRID_FS);
+    this.fillProg = new Program(gl, FULLSCREEN_VS, FILL_FS);
+    this.outlineProg = new Program(gl, FULLSCREEN_VS, OUTLINE_SRC_FS);
+    this.blitProg = new Program(gl, FULLSCREEN_VS, BLIT_FS);
+    this.safeProg = new Program(gl, FULLSCREEN_VS, SAFE_FS);
 
     const vao = gl.createVertexArray();
     const vbo = gl.createBuffer();
@@ -172,14 +238,51 @@ export class Renderer {
     this.surfaceRes.clear();
     for (const res of this.sourceRes.values()) res.program?.dispose();
     this.sourceRes.clear();
+    for (const m of this.mediaRes.values()) this.releaseMedia(m, true);
+    this.mediaRes.clear();
     this.warpProg?.dispose();
     this.masterProg?.dispose();
     this.checkerProg?.dispose();
     this.gridProg?.dispose();
+    this.fillProg?.dispose();
+    this.outlineProg?.dispose();
+    this.blitProg?.dispose();
+    this.safeProg?.dispose();
     this.outputFbo?.dispose();
     gl.deleteBuffer(this.fsTriVbo);
     gl.deleteVertexArray(this.fsTriVao);
     gl.deleteBuffer(this.quadIndexBuf);
+  }
+
+  private releaseMedia(m: MediaRes, deleteTexture: boolean): void {
+    if (m.video) {
+      m.video.pause();
+      m.video.src = '';
+      m.video = null;
+    }
+    if (m.objectUrl) {
+      URL.revokeObjectURL(m.objectUrl);
+      m.objectUrl = null;
+    }
+    if (deleteTexture && m.texture) this.gl.deleteTexture(m.texture);
+    m.texture = null;
+  }
+
+  private watchdog(dtMs: number, now: number): void {
+    const slow = this.stats.frameMs > 22 || dtMs > 50;
+    if (!slow) {
+      this.slowSince = 0;
+      return;
+    }
+    if (this.slowSince === 0) this.slowSince = now;
+    // Log a sustained slowdown at most once per 10s. Report only — never
+    // restart or intervene.
+    if (now - this.slowSince > 1000 && now - this.lastDropLog > 10000) {
+      this.lastDropLog = now;
+      this.stats.dropEvents++;
+      this.watchdogLog.push({ at: new Date().toISOString(), ms: Math.round(dtMs * 10) / 10 });
+      if (this.watchdogLog.length > WATCHDOG_LIMIT) this.watchdogLog.shift();
+    }
   }
 
   private renderFrame(t: number): void {
@@ -189,6 +292,7 @@ export class Renderer {
     if (dt > 0.25 || dt < 0) dt = 1 / 60;
     this.stats.frameMs += (dt * 1000 - this.stats.frameMs) * 0.08;
     this.stats.fps = 1000 / Math.max(this.stats.frameMs, 0.01);
+    this.watchdog(dt * 1000, t);
 
     if (this.stats.contextLost) return;
 
@@ -212,12 +316,16 @@ export class Renderer {
     }
     this.outputFbo.ensureSize(cw, ch);
 
-    const surfaces = project.surfaces.filter((s) => s.enabled);
+    const anySolo = project.surfaces.some((s) => s.enabled && s.solo);
+    const surfaces = project.surfaces.filter(
+      (s) => s.enabled && (!anySolo || s.solo),
+    );
 
     // 1. Each surface's source into its offscreen FBO.
-    for (const surface of surfaces) {
+    for (let i = 0; i < surfaces.length; i++) {
+      const surface = surfaces[i];
       const res = this.ensureSurfaceRes(surface, cw, ch);
-      this.renderSource(surface, res, project, overlay);
+      this.renderSource(surface, res, project, overlay, i);
     }
 
     // 2. Composite each surface into the output FBO through its warp.
@@ -226,7 +334,6 @@ export class Renderer {
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     this.warpProg.use();
     this.warpProg.set1i('u_tex', 0);
@@ -236,23 +343,28 @@ export class Renderer {
       if (!res) continue;
       const verts = cornerPinVertices(surface.warp.corners);
       if (!verts) continue; // degenerate quad — skip rather than draw garbage
+      this.applyBlend(overlay === 'off' ? surface.blendMode : 'normal');
+      this.bindMask(surface, overlay);
       gl.bindVertexArray(res.vao);
       gl.bindBuffer(gl.ARRAY_BUFFER, res.vbo);
       gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW);
       gl.bindTexture(gl.TEXTURE_2D, res.fbo.texture);
-      this.warpProg.set1f('u_opacity', surface.opacity);
+      this.warpProg.set1f('u_opacity', overlay === 'off' ? surface.opacity : 1);
       gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
     }
     gl.bindVertexArray(null);
 
-    // 3. Alignment grid over the composite, before the master pass, so it is
-    // judged under the same output conditions as the content.
+    // 3. Output-space overlays, before the master pass so they are judged
+    // under the same output conditions as the content.
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
     if (overlay === 'grid') {
       this.gridProg.use();
       this.gridProg.set2f('u_resolution', cw, ch);
-      gl.bindVertexArray(this.fsTriVao);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      gl.bindVertexArray(null);
+      this.drawFsTriangle();
+    } else if (overlay === 'outline') {
+      this.safeProg.use();
+      this.safeProg.set2f('u_resolution', cw, ch);
+      this.drawFsTriangle();
     }
     gl.disable(gl.BLEND);
 
@@ -268,12 +380,66 @@ export class Renderer {
     this.masterProg.set1f('u_temperature', Math.min(Math.max(m.temperature / 100, -1), 1));
     this.masterProg.set1f('u_gammaExp', 2.2 / Math.min(Math.max(m.gamma, 0.5), 6));
     this.masterProg.set1f('u_brightness', Math.min(Math.max(m.brightness, 0), 1) * this.fade);
-    gl.bindVertexArray(this.fsTriVao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.bindVertexArray(null);
+    this.drawFsTriangle();
 
     // Release GPU resources for surfaces/sources deleted from the document.
     if (this.frame % 120 === 0) this.collectGarbage(project);
+  }
+
+  private applyBlend(mode: BlendMode): void {
+    const gl = this.gl;
+    // Sources are premultiplied by the warp shader (except multiply-prep).
+    switch (mode) {
+      case 'add':
+        gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE);
+        break;
+      case 'screen':
+        gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_COLOR, gl.ZERO, gl.ONE);
+        break;
+      case 'multiply':
+        gl.blendFuncSeparate(gl.DST_COLOR, gl.ZERO, gl.ZERO, gl.ONE);
+        break;
+      default:
+        gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    }
+    this.warpProg.set1i('u_blendPrep', mode === 'multiply' ? 1 : 0);
+  }
+
+  private bindMask(surface: Surface, overlay: OverlayMode): void {
+    const mask = surface.mask;
+    const active = overlay === 'off' && mask.enabled && mask.polygons.length > 0;
+    if (!active) {
+      this.warpProg.set1i('u_maskCount', 0);
+      return;
+    }
+    let ptr = 0;
+    let polyCount = 0;
+    for (const poly of mask.polygons) {
+      if (polyCount >= MAX_MASK_POLYS) break;
+      if (poly.points.length < 3) continue;
+      const count = Math.min(poly.points.length, MAX_MASK_POINTS - ptr);
+      if (count < 3) break;
+      this.maskRange[polyCount * 2] = ptr;
+      this.maskRange[polyCount * 2 + 1] = count;
+      this.maskInvert[polyCount] = poly.invert ? 1 : 0;
+      for (let i = 0; i < count; i++) {
+        this.maskPts[(ptr + i) * 2] = poly.points[i][0];
+        this.maskPts[(ptr + i) * 2 + 1] = poly.points[i][1];
+      }
+      ptr += count;
+      polyCount++;
+    }
+    const gl = this.gl;
+    this.warpProg.set1i('u_maskCount', polyCount);
+    this.warpProg.set1f('u_maskFeather', mask.feather);
+    if (polyCount > 0) {
+      const lPts = this.warpProg.loc('u_maskPts[0]');
+      const lRange = this.warpProg.loc('u_maskRange[0]');
+      const lInv = this.warpProg.loc('u_maskInvert[0]');
+      if (lPts) gl.uniform2fv(lPts, this.maskPts);
+      if (lRange) gl.uniform2iv(lRange, this.maskRange);
+      if (lInv) gl.uniform1iv(lInv, this.maskInvert);
+    }
   }
 
   private ensureSurfaceRes(surface: Surface, cw: number, ch: number): SurfaceRes {
@@ -311,6 +477,7 @@ export class Renderer {
     res: SurfaceRes,
     project: Project,
     overlay: OverlayMode,
+    surfaceIndex: number,
   ): void {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, res.fbo.framebuffer);
@@ -320,18 +487,38 @@ export class Renderer {
     if (overlay === 'checker') {
       this.checkerProg.use();
       this.checkerProg.set2f('u_squares', 8, 8);
-      gl.bindVertexArray(this.fsTriVao);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      gl.bindVertexArray(null);
+      this.drawFsTriangle();
+      return;
+    }
+    if (overlay === 'fill' || overlay === 'outline') {
+      const prog = overlay === 'fill' ? this.fillProg : this.outlineProg;
+      const c = FILL_COLORS[surfaceIndex % FILL_COLORS.length];
+      if (overlay === 'outline') {
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+      prog.use();
+      prog.set3f('u_color', c[0], c[1], c[2]);
+      this.drawFsTriangle();
       return;
     }
 
     const source = surface.sourceId
       ? project.sources.find((s) => s.id === surface.sourceId)
       : undefined;
-    const prog = source && source.type === 'shader' && source.glsl
-      ? this.ensureSourceProgram(source)
-      : null;
+    if (!source) {
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return;
+    }
+
+    if (source.type === 'image' || source.type === 'video') {
+      this.renderMediaSource(source);
+      return;
+    }
+
+    const glsl = this.effectiveGlsl(source);
+    const prog = glsl != null ? this.ensureSourceProgram(source, glsl) : null;
     if (!prog) {
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -343,10 +530,109 @@ export class Renderer {
     prog.set2f('u_resolution', res.fbo.width, res.fbo.height);
     prog.set1i('u_frame', this.frame);
     prog.set4f('u_random', ...this.random);
-    const params = { ...source!.uniforms, ...surface.sourceParams };
+    const params = { ...source.uniforms, ...surface.sourceParams };
     for (const [key, value] of Object.entries(params)) {
       this.setParamUniform(prog, `u_${key}`, value);
     }
+    this.drawFsTriangle();
+  }
+
+  /** Solid and gradient sources run through the shader pipeline with
+   * internal bodies, so the same param controls and uniforms apply. */
+  private effectiveGlsl(source: Source): string | null {
+    if (source.type === 'shader') return source.glsl ?? null;
+    if (source.type === 'solid') return SOLID_BODY;
+    if (source.type === 'gradient') return GRADIENT_BODY;
+    return null;
+  }
+
+  private renderMediaSource(source: Source): void {
+    const gl = this.gl;
+    const media = source.mediaId ? this.ensureMedia(source) : null;
+    if (!media || !media.ready || !media.texture) {
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return;
+    }
+    media.lastUsedFrame = this.frame;
+    if (media.video && media.video.readyState >= 2) {
+      if (media.video.paused) void media.video.play().catch(() => undefined);
+      gl.bindTexture(gl.TEXTURE_2D, media.texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, media.video);
+    }
+    this.blitProg.use();
+    this.blitProg.set1i('u_tex', 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, media.texture);
+    this.drawFsTriangle();
+  }
+
+  private ensureMedia(source: Source): MediaRes {
+    const id = source.mediaId as string;
+    let m = this.mediaRes.get(id);
+    if (m) return m;
+    m = {
+      texture: null,
+      video: null,
+      objectUrl: null,
+      ready: false,
+      failed: false,
+      lastUsedFrame: this.frame,
+    };
+    this.mediaRes.set(id, m);
+    void this.loadMedia(id, source.type === 'video', m);
+    return m;
+  }
+
+  private async loadMedia(id: string, isVideo: boolean, m: MediaRes): Promise<void> {
+    try {
+      const blob = await getMedia(id);
+      if (!blob || this.disposed) {
+        m.failed = true;
+        return;
+      }
+      const gl = this.gl;
+      const makeTexture = (): WebGLTexture => {
+        const tex = gl.createTexture();
+        if (!tex) throw new Error('texture allocation failed');
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        return tex;
+      };
+      if (isVideo) {
+        const video = document.createElement('video');
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        m.objectUrl = URL.createObjectURL(blob);
+        video.src = m.objectUrl;
+        await video.play().catch(() => undefined);
+        m.video = video;
+        m.texture = makeTexture();
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        m.ready = true;
+      } else {
+        const bitmap = await createImageBitmap(blob);
+        if (this.disposed) {
+          bitmap.close();
+          return;
+        }
+        m.texture = makeTexture();
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+        bitmap.close();
+        m.ready = true;
+      }
+    } catch (e) {
+      console.warn(`media ${id} failed to load`, e);
+      m.failed = true;
+    }
+  }
+
+  private drawFsTriangle(): void {
+    const gl = this.gl;
     gl.bindVertexArray(this.fsTriVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
@@ -356,9 +642,8 @@ export class Renderer {
    * Compiles a source's shader, caching by source id. On a failed recompile
    * the previous working program is kept — a typo must never black the wall.
    */
-  private ensureSourceProgram(source: Source): Program | null {
-    const glsl = source.glsl ?? '';
-    let res = this.sourceRes.get(source.id);
+  private ensureSourceProgram(source: Source, glsl: string): Program | null {
+    const res = this.sourceRes.get(source.id);
     if (res && res.glsl === glsl) return res.program;
     let program = res?.program ?? null;
     let error: string | null = null;
@@ -368,7 +653,6 @@ export class Renderer {
       program = next;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
-      console.warn(`shader "${source.name}" failed to compile; keeping last good:\n${error}`);
     }
     // Cache under the exact text either way: a broken shader is not retried
     // every frame, and any edit changes the key and triggers a recompile.
@@ -402,6 +686,18 @@ export class Renderer {
       if (sourceIds.has(id)) continue;
       res.program?.dispose();
       this.sourceRes.delete(id);
+    }
+    const mediaIds = new Set(
+      project.sources.map((s) => s.mediaId).filter((x): x is string => !!x),
+    );
+    for (const [id, m] of this.mediaRes) {
+      if (mediaIds.has(id)) {
+        // Pause videos that no visible surface has sampled recently.
+        if (m.video && !m.video.paused && this.frame - m.lastUsedFrame > 120) m.video.pause();
+        continue;
+      }
+      this.releaseMedia(m, true);
+      this.mediaRes.delete(id);
     }
   }
 }

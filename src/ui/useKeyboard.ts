@@ -26,7 +26,8 @@ export function useKeyboard(): void {
 
       if (e.key === 'Escape') {
         if (field) return; // fields handle their own Escape
-        if (s.helpOpen) s.setHelpOpen(false);
+        if (s.maskEdit) s.exitMaskEdit();
+        else if (s.helpOpen) s.setHelpOpen(false);
         else s.setMode(s.mode === 'edit' ? 'show' : 'edit');
         return;
       }
@@ -45,17 +46,30 @@ export function useKeyboard(): void {
         } else if (k === 'y') {
           e.preventDefault();
           s.redo();
+        } else if (k === 'd') {
+          if (s.mode === 'edit' && s.selectedSurfaceId) {
+            e.preventDefault();
+            s.duplicateSurface(s.selectedSurfaceId);
+          }
         }
         return;
       }
 
+      const edit = s.mode === 'edit';
+      const ambient = focusIsAmbient();
+
       const nudge = (dx: number, dy: number): void => {
-        if (s.mode !== 'edit' || !focusIsAmbient()) return;
+        if (!edit || !ambient) return;
         if (s.selectedSurfaceId == null || s.selectedHandle == null) return;
         e.preventDefault();
         const scale = e.shiftKey ? 10 : e.altKey ? 0.1 : 1;
         s.nudgeCorner(s.selectedSurfaceId, s.selectedHandle, dx * scale, dy * scale);
       };
+
+      if (/^[1-9]$/.test(e.key)) {
+        if (edit && ambient) s.selectSurfaceByIndex(Number(e.key) - 1);
+        return;
+      }
 
       switch (e.key) {
         case 'b':
@@ -63,21 +77,54 @@ export function useKeyboard(): void {
           s.toggleBlackout();
           break;
         case '\\':
-          if (s.mode === 'edit') s.toggleDimChrome();
+          if (edit) s.toggleDimChrome();
           break;
         case 'g':
         case 'G':
-          if (s.mode === 'edit') s.cycleOverlay();
+          if (edit) s.cycleOverlay();
           break;
         case 'h':
         case 'H':
-          if (s.mode === 'edit') s.toggleHandles();
+          if (edit) s.toggleHandles();
+          break;
+        case 'n':
+        case 'N':
+          if (edit && ambient) s.addSurface();
+          break;
+        case 'f':
+        case 'F':
+          if (edit && s.selectedSurfaceId) s.toggleSolo(s.selectedSurfaceId);
+          break;
+        case 'm':
+        case 'M':
+          if (edit && s.selectedSurfaceId) {
+            if (s.maskEdit) {
+              s.exitMaskEdit();
+            } else {
+              const srf = s.project.surfaces.find((x) => x.id === s.selectedSurfaceId);
+              if (srf && srf.mask.polygons.length > 0) s.enterMaskEdit(srf.id, 0);
+              else if (srf) s.addMaskPolygon(srf.id);
+            }
+          }
+          break;
+        case 'Enter':
+          if (s.maskEdit && ambient) s.exitMaskEdit();
+          break;
+        case 'Delete':
+        case 'Backspace':
+          if (!edit || !ambient) break;
+          e.preventDefault();
+          if (s.maskEdit) {
+            if (s.maskEdit.selectedPoint != null) s.deleteMaskPoint(s.maskEdit.selectedPoint);
+          } else if (s.selectedSurfaceId) {
+            s.deleteSurface(s.selectedSurfaceId);
+          }
           break;
         case '?':
-          if (s.mode === 'edit') s.setHelpOpen(!s.helpOpen);
+          if (edit) s.setHelpOpen(!s.helpOpen);
           break;
         case 'Tab':
-          if (s.mode === 'edit' && focusIsAmbient()) {
+          if (edit && ambient) {
             e.preventDefault();
             s.cycleSurface(e.shiftKey ? -1 : 1);
           }
