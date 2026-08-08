@@ -1,0 +1,19 @@
+:root {
+  /* Theatrical lighting palette — amber marks what you touch, cyan marks
+     what the system tells you. Never interchange them. */
+  --void: #0b0d12;
+  --panel: #131722;
+  --well: #1c2230;
+  --rule: #2a3243;
+  --haze: #7c8798;
+  --paper: #e6e9ef;
+  --tungsten: #f2a93b;
+  --gel-cyan: #4fd1e0;
+  --alarm: #e2564b;
+
+  --font-ui: 'Archivo', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --panel-bg: rgba(19, 23, 34, 0.92);
+  --inset: 12px;
+}
