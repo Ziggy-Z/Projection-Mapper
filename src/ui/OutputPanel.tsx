@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/store';
 import { getRenderer } from '../runtime';
+import { remoteEnabled, setRemoteEnabled } from '../remote';
 import { NumberField } from './controls/NumberField';
+import { Toggle } from './controls/common';
 
 export function OutputPanel(): React.ReactElement {
   const master = useAppStore((s) => s.project.master);
@@ -9,6 +11,7 @@ export function OutputPanel(): React.ReactElement {
   const beginGesture = useAppStore((s) => s.beginGesture);
   const endGesture = useAppStore((s) => s.endGesture);
   const [drops, setDrops] = useState(0);
+  const [remote, setRemote] = useState(remoteEnabled);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -60,6 +63,18 @@ export function OutputPanel(): React.ReactElement {
         onGestureEnd={endGesture}
         onChange={(v) => setMaster({ temperature: v }, 'master.temperature')}
       />
+      <div className="numfield">
+        <span className="nf-label" title="Needs server/remote.mjs running on this machine">
+          LAN remote
+        </span>
+        <Toggle
+          checked={remote}
+          onChange={(v) => {
+            setRemote(v);
+            setRemoteEnabled(v);
+          }}
+        />
+      </div>
       {drops > 0 && (
         <div className="panel-hint">
           Frame drops logged: <span className="mono drop-count">{drops}</span>

@@ -1,5 +1,9 @@
 import { useAppStore } from '../store/store';
-import { openProjectFromFile, saveProjectToFile } from '../store/persistence';
+import {
+  importSnippetFromFile,
+  openProjectFromFile,
+  saveProjectToFile,
+} from '../store/persistence';
 import { defaultProject } from '../model/defaults';
 
 export function ProjectPanel(): React.ReactElement {
@@ -47,6 +51,16 @@ export function ProjectPanel(): React.ReactElement {
           }}
         >
           New
+        </button>
+      </div>
+      <div className="btn-row">
+        <button
+          type="button"
+          className="btn"
+          title="Import a surface or source snippet"
+          onClick={importSnippetFromFile}
+        >
+          Import snippet
         </button>
       </div>
       <div className="panel-hint">Esc show · G overlays · ? keys</div>

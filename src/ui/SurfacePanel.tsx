@@ -1,4 +1,5 @@
 import type { BlendMode, WarpType } from '../model/types';
+import { exportSurfaceSnippet } from '../store/persistence';
 import { parseParamSpecs } from '../model/annotations';
 import { GRADIENT_BODY, SOLID_BODY } from '../content/shaders';
 import { useAppStore } from '../store/store';
@@ -206,6 +207,15 @@ export function SurfacePanel(): React.ReactElement | null {
           />
         </>
       )}
+
+      <button
+        type="button"
+        className="btn add-btn export-btn"
+        title="Save this surface (and its source) as a shareable snippet"
+        onClick={() => exportSurfaceSnippet(useAppStore.getState().project, surface.id)}
+      >
+        Export surface
+      </button>
     </section>
   );
 }

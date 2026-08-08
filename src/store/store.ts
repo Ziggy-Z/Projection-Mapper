@@ -136,6 +136,9 @@ export interface AppState {
   shaderEditorId: string | null;
   setShaderEditor(id: string | null): void;
 
+  /** Inserts an imported snippet with fresh ids, relinking surface→source. */
+  importSnippet(surface: Surface | null, source: Source | null): void;
+
   undo(): void;
   redo(): void;
   loadProject(project: Project): void;
@@ -655,6 +658,33 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     shaderEditorId: null,
     setShaderEditor: (shaderEditorId) => set({ shaderEditorId }),
+
+    importSnippet: (surface, source) => {
+      if (!surface && !source) return;
+      pushUndo(get().project, null);
+      const newSourceId = source ? newId('src') : null;
+      const newSurfaceId = surface ? newId('srf') : null;
+      patchProject((pr) => {
+        let sources = pr.sources;
+        let surfaces = pr.surfaces;
+        if (source && newSourceId) {
+          sources = [...sources, { ...structuredClone(source), id: newSourceId }];
+        }
+        if (surface && newSurfaceId) {
+          const copy = structuredClone(surface);
+          copy.id = newSurfaceId;
+          if (newSourceId) copy.sourceId = newSourceId;
+          else if (copy.sourceId && !sources.some((x) => x.id === copy.sourceId)) {
+            copy.sourceId = null;
+          }
+          surfaces = [...surfaces, copy];
+        }
+        return { ...pr, sources, surfaces };
+      });
+      if (newSurfaceId) {
+        set({ selectedSurfaceId: newSurfaceId, selectedHandle: null, maskEdit: null });
+      }
+    },
 
     undo: () => {
       const s = get();

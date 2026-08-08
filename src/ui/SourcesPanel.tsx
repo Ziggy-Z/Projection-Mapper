@@ -6,6 +6,7 @@ import { createShaderSource } from '../model/defaults';
 import { parseParamSpecs, specDefaults } from '../model/annotations';
 import { BUILTIN_SHADERS, GRADIENT_BODY, SOLID_BODY } from '../content/shaders';
 import { putMedia } from '../store/media';
+import { exportSourceSnippet } from '../store/persistence';
 import { IconButton, IconCross } from './controls/common';
 
 function pickFile(accept: string, onFile: (f: File) => void): void {
@@ -98,6 +99,17 @@ export function SourcesPanel(): React.ReactElement {
                   GLSL
                 </button>
               )}
+              <button
+                type="button"
+                className="btn mini"
+                title="Save as a shareable snippet"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  exportSourceSnippet(useAppStore.getState().project, src.id);
+                }}
+              >
+                Exp
+              </button>
               <IconButton
                 title="Delete"
                 danger
