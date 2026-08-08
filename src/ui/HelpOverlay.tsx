@@ -1,11 +1,18 @@
 import { useAppStore } from '../store/store';
 
 const KEYS: [string, string][] = [
-  ['Esc', 'Edit / Show mode'],
+  ['Esc', 'Edit / Show mode (exits mask edit first)'],
   ['B', 'Blackout'],
   ['\\', 'Dim chrome'],
   ['Tab / Shift+Tab', 'Cycle surface'],
-  ['G', 'Calibration overlay (grid / checker)'],
+  ['1–9', 'Select surface by index'],
+  ['N', 'New surface'],
+  ['Ctrl+D', 'Duplicate surface'],
+  ['Del', 'Delete surface / mask point'],
+  ['F', 'Solo selected surface'],
+  ['M', 'Mask edit for selected surface'],
+  ['Enter', 'Close mask polygon and exit'],
+  ['G', 'Overlays: grid / checker / fill / outlines'],
   ['H', 'Handle visibility'],
   ['Arrows', 'Nudge corner 1px'],
   ['Shift+Arrows', 'Nudge 10px'],

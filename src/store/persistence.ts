@@ -1,5 +1,5 @@
-import type { Project } from '../model/types';
-import { parseProject } from '../model/defaults';
+import type { Project, Source, Surface } from '../model/types';
+import { defaultProject, parseProject } from '../model/defaults';
 import { useAppStore } from './store';
 
 const STORAGE_KEY = 'projection-mapper.project.v1';
@@ -98,6 +98,73 @@ export async function saveProjectToFile(project: Project): Promise<void> {
     }
   }
   downloadText(filename, json);
+}
+
+/* ---- Shareable snippets: single surfaces or sources ---- */
+
+const SURFACE_KIND = 'projection-mapper/surface';
+const SOURCE_KIND = 'projection-mapper/source';
+
+export function exportSurfaceSnippet(project: Project, surfaceId: string): void {
+  const surface = project.surfaces.find((x) => x.id === surfaceId);
+  if (!surface) return;
+  const source = surface.sourceId
+    ? project.sources.find((x) => x.id === surface.sourceId)
+    : undefined;
+  downloadText(
+    `${slug(surface.name)}.surface.json`,
+    JSON.stringify({ kind: SURFACE_KIND, version: 1, surface, source }, null, 2),
+  );
+}
+
+export function exportSourceSnippet(project: Project, sourceId: string): void {
+  const source = project.sources.find((x) => x.id === sourceId);
+  if (!source) return;
+  downloadText(
+    `${slug(source.name)}.source.json`,
+    JSON.stringify({ kind: SOURCE_KIND, version: 1, source }, null, 2),
+  );
+}
+
+/** Validates snippet contents by round-tripping them through the project
+ * parser, so imports get the same normalization as a full project load. */
+function validateSnippet(data: unknown): { surface?: Surface; source?: Source } {
+  const d = data as { kind?: string; surface?: unknown; source?: unknown } | null;
+  const base = defaultProject();
+  if (d?.kind === SURFACE_KIND) {
+    const proj = parseProject({
+      ...base,
+      surfaces: [d.surface],
+      sources: d.source ? [d.source] : [],
+    });
+    return { surface: proj.surfaces[0], source: proj.sources[0] };
+  }
+  if (d?.kind === SOURCE_KIND) {
+    const proj = parseProject({ ...base, surfaces: [], sources: [d.source] });
+    return { source: proj.sources[0] };
+  }
+  throw new Error('not a projection-mapper snippet');
+}
+
+export function importSnippetFromFile(): void {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const store = useAppStore.getState();
+    try {
+      const parsed = validateSnippet(JSON.parse(await file.text()));
+      store.importSnippet(parsed.surface ?? null, parsed.source ?? null);
+      store.setNotice(
+        parsed.surface ? 'Surface imported.' : 'Source imported.',
+      );
+    } catch (e) {
+      store.setNotice(`Could not import: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  input.click();
 }
 
 export function openProjectFromFile(): void {

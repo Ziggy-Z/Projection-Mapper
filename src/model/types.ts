@@ -9,7 +9,7 @@ export type Vec2 = [number, number];
 export type BlendMode = 'normal' | 'add' | 'screen' | 'multiply';
 export type WarpType = 'cornerPin' | 'mesh';
 export type SourceType = 'shader' | 'image' | 'video' | 'solid' | 'gradient';
-export type OverlayMode = 'off' | 'grid' | 'checker';
+export type OverlayMode = 'off' | 'grid' | 'checker' | 'fill' | 'outline';
 
 export interface MeshWarp {
   cols: number;
@@ -62,6 +62,8 @@ export interface Source {
   glsl?: string;
   /** Uniform defaults, keyed without the `u_` prefix. */
   uniforms?: Record<string, SourceParamValue>;
+  /** IndexedDB blob reference for image/video sources. */
+  mediaId?: string;
 }
 
 export interface SceneSurfaceState {

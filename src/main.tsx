@@ -9,6 +9,8 @@ import './styles/app.css';
 import { App } from './App';
 import { useAppStore } from './store/store';
 import { initAutosave, readStored } from './store/persistence';
+import { initScheduler } from './store/scheduler';
+import { initRemote } from './remote';
 
 // Restore the autosaved project before first render: the piece boots straight
 // into Show mode with the prior state, or into the recovery screen — never a
@@ -19,5 +21,7 @@ if (stored) {
   else useAppStore.getState().setRecovery(stored.raw);
 }
 initAutosave();
+initScheduler();
+initRemote();
 
 createRoot(document.getElementById('root') as HTMLElement).render(<App />);

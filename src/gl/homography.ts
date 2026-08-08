@@ -43,6 +43,21 @@ export function squareToQuad(q: readonly Vec2[]): Homography | null {
   };
 }
 
+/** Forward map: surface UV → normalized output space. */
+export function applyHomography(H: Homography, u: number, v: number): Vec2 {
+  const w = H.g * u + H.h * v + 1;
+  return [(H.a * u + H.b * v + H.c) / w, (H.d * u + H.e * v + H.f) / w];
+}
+
+/** Inverse map: normalized output space → surface UV (via adjugate). */
+export function invertHomography(H: Homography, x: number, y: number): Vec2 {
+  const { a, b, c, d, e, f, g, h } = H;
+  const iu = (e - f * h) * x + (c * h - b) * y + (b * f - c * e);
+  const iv = (f * g - d) * x + (a - c * g) * y + (c * d - a * f);
+  const iw = (d * h - e * g) * x + (b * g - a * h) * y + (a * e - b * d);
+  return Math.abs(iw) < 1e-12 ? [0, 0] : [iu / iw, iv / iw];
+}
+
 const UNIT_CORNERS: readonly Vec2[] = [
   [0, 0],
   [1, 0],
