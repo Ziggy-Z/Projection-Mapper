@@ -28,6 +28,8 @@ export function SourcesPanel(): React.ReactElement {
   const deleteSource = useAppStore((s) => s.deleteSource);
   const assignSource = useAppStore((s) => s.assignSource);
   const setNotice = useAppStore((s) => s.setNotice);
+  const setShaderEditor = useAppStore((s) => s.setShaderEditor);
+  const shaderEditorId = useAppStore((s) => s.shaderEditorId);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const addMedia = (type: 'image' | 'video'): void => {
@@ -84,6 +86,18 @@ export function SourcesPanel(): React.ReactElement {
             <span className="mono source-type">{src.type.slice(0, 3)}</span>
             <span className="surface-name">{src.name}</span>
             <span className="row-actions">
+              {src.type === 'shader' && (
+                <button
+                  type="button"
+                  className={shaderEditorId === src.id ? 'btn mini active' : 'btn mini'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShaderEditor(shaderEditorId === src.id ? null : src.id);
+                  }}
+                >
+                  GLSL
+                </button>
+              )}
               <IconButton
                 title="Delete"
                 danger

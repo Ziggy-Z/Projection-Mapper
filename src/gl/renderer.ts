@@ -10,6 +10,7 @@ import { getMedia } from '../store/media';
 import { GRADIENT_BODY, SOLID_BODY } from '../content/shaders';
 import { Fbo } from './fbo';
 import { cornerPinVertices } from './homography';
+import { tessellateMesh } from './mesh';
 import { Program } from './program';
 import {
   BLIT_FS,
@@ -55,7 +56,12 @@ export interface WatchdogEntry {
 interface SurfaceRes {
   fbo: Fbo;
   vbo: WebGLBuffer;
+  ibo: WebGLBuffer;
   vao: WebGLVertexArrayObject;
+  /** Identity of the uploaded mesh point array, or null when the buffers
+   * hold corner-pin quad data. Mesh geometry re-tessellates only on change. */
+  meshKey: unknown;
+  indexCount: number;
 }
 
 interface SourceRes {
@@ -115,7 +121,6 @@ export class Renderer {
   private safeProg!: Program;
   private fsTriVao!: WebGLVertexArrayObject;
   private fsTriVbo!: WebGLBuffer;
-  private quadIndexBuf!: WebGLBuffer;
   private outputFbo!: Fbo;
   private surfaceRes = new Map<string, SurfaceRes>();
   private sourceRes = new Map<string, SourceRes>();
@@ -209,8 +214,7 @@ export class Renderer {
 
     const vao = gl.createVertexArray();
     const vbo = gl.createBuffer();
-    const ibo = gl.createBuffer();
-    if (!vao || !vbo || !ibo) throw new Error('buffer allocation failed');
+    if (!vao || !vbo) throw new Error('buffer allocation failed');
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
     gl.bufferData(gl.ARRAY_BUFFER, FS_TRIANGLE, gl.STATIC_DRAW);
@@ -220,11 +224,6 @@ export class Renderer {
     this.fsTriVao = vao;
     this.fsTriVbo = vbo;
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, QUAD_INDICES, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-    this.quadIndexBuf = ibo;
-
     this.outputFbo = new Fbo(gl, 4, 4);
   }
 
@@ -233,6 +232,7 @@ export class Renderer {
     for (const res of this.surfaceRes.values()) {
       res.fbo.dispose();
       gl.deleteBuffer(res.vbo);
+      gl.deleteBuffer(res.ibo);
       gl.deleteVertexArray(res.vao);
     }
     this.surfaceRes.clear();
@@ -251,7 +251,6 @@ export class Renderer {
     this.outputFbo?.dispose();
     gl.deleteBuffer(this.fsTriVbo);
     gl.deleteVertexArray(this.fsTriVao);
-    gl.deleteBuffer(this.quadIndexBuf);
   }
 
   private releaseMedia(m: MediaRes, deleteTexture: boolean): void {
@@ -341,16 +340,13 @@ export class Renderer {
     for (const surface of surfaces) {
       const res = this.surfaceRes.get(surface.id);
       if (!res) continue;
-      const verts = cornerPinVertices(surface.warp.corners);
-      if (!verts) continue; // degenerate quad — skip rather than draw garbage
+      if (!this.uploadWarpGeometry(surface, res)) continue;
       this.applyBlend(overlay === 'off' ? surface.blendMode : 'normal');
       this.bindMask(surface, overlay);
       gl.bindVertexArray(res.vao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, res.vbo);
-      gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW);
       gl.bindTexture(gl.TEXTURE_2D, res.fbo.texture);
       this.warpProg.set1f('u_opacity', overlay === 'off' ? surface.opacity : 1);
-      gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+      gl.drawElements(gl.TRIANGLES, res.indexCount, gl.UNSIGNED_SHORT, 0);
     }
     gl.bindVertexArray(null);
 
@@ -442,13 +438,50 @@ export class Renderer {
     }
   }
 
+  /**
+   * Uploads the surface's warp geometry (corner-pin quad or tessellated
+   * mesh). Corner-pin data is tiny and re-uploaded every frame; mesh
+   * geometry re-tessellates only when the control points change.
+   * Returns false for degenerate geometry, which is skipped.
+   */
+  private uploadWarpGeometry(surface: Surface, res: SurfaceRes): boolean {
+    const gl = this.gl;
+    const warp = surface.warp;
+    if (warp.type === 'mesh' && warp.mesh) {
+      if (res.meshKey === warp.mesh.points) return res.indexCount > 0;
+      const geo = tessellateMesh(warp.mesh);
+      if (!geo) return false;
+      gl.bindBuffer(gl.ARRAY_BUFFER, res.vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, geo.vertices, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, res.ibo);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, geo.indices, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+      res.meshKey = warp.mesh.points;
+      res.indexCount = geo.indices.length;
+      return true;
+    }
+    const verts = cornerPinVertices(warp.corners);
+    if (!verts) return false;
+    gl.bindBuffer(gl.ARRAY_BUFFER, res.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW);
+    if (res.meshKey !== null || res.indexCount !== 6) {
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, res.ibo);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, QUAD_INDICES, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+      res.meshKey = null;
+      res.indexCount = 6;
+    }
+    return true;
+  }
+
   private ensureSurfaceRes(surface: Surface, cw: number, ch: number): SurfaceRes {
     const gl = this.gl;
     let res = this.surfaceRes.get(surface.id);
     if (!res) {
       const vbo = gl.createBuffer();
+      const ibo = gl.createBuffer();
       const vao = gl.createVertexArray();
-      if (!vbo || !vao) throw new Error('surface buffer allocation failed');
+      if (!vbo || !ibo || !vao) throw new Error('surface buffer allocation failed');
       gl.bindVertexArray(vao);
       gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
       gl.bufferData(gl.ARRAY_BUFFER, 4 * 5 * 4, gl.DYNAMIC_DRAW);
@@ -456,15 +489,21 @@ export class Renderer {
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 20, 0);
       gl.enableVertexAttribArray(1);
       gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 20, 8);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.quadIndexBuf);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, QUAD_INDICES, gl.STATIC_DRAW);
       gl.bindVertexArray(null);
-      res = { fbo: new Fbo(gl, 128, 128), vbo, vao };
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+      res = { fbo: new Fbo(gl, 128, 128), vbo, ibo, vao, meshKey: null, indexCount: 6 };
       this.surfaceRes.set(surface.id, res);
     }
-    // Size the FBO to the warped quad's bounding box, quantized to 128px so
-    // dragging a corner doesn't reallocate every frame.
-    const xs = surface.warp.corners.map((c) => c[0]);
-    const ys = surface.warp.corners.map((c) => c[1]);
+    // Size the FBO to the warped geometry's bounding box, quantized to 128px
+    // so dragging a handle doesn't reallocate every frame.
+    const pts =
+      surface.warp.type === 'mesh' && surface.warp.mesh
+        ? surface.warp.mesh.points
+        : surface.warp.corners;
+    const xs = pts.map((c) => c[0]);
+    const ys = pts.map((c) => c[1]);
     const wPx = (Math.max(...xs) - Math.min(...xs)) * cw;
     const hPx = (Math.max(...ys) - Math.min(...ys)) * ch;
     const quant = (v: number): number => Math.min(4096, Math.max(128, Math.ceil(v / 128) * 128));
@@ -678,6 +717,7 @@ export class Renderer {
       if (surfaceIds.has(id)) continue;
       res.fbo.dispose();
       gl.deleteBuffer(res.vbo);
+      gl.deleteBuffer(res.ibo);
       gl.deleteVertexArray(res.vao);
       this.surfaceRes.delete(id);
     }

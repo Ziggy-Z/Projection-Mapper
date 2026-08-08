@@ -737,6 +737,104 @@ body.mode-show * {
   font-size: 11px;
 }
 
+/* ---- Mesh grid ---- */
+
+.mesh-grid polyline {
+  fill: none;
+  stroke: var(--haze);
+  stroke-width: 0.75;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ---- Schedule ---- */
+
+.event-row {
+  border-top: 1px solid var(--rule);
+  padding-top: 6px;
+  margin-top: 6px;
+}
+
+.event-row-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.at-input {
+  flex: 1;
+  margin: 0;
+  font-size: 12px;
+}
+
+.at-input.invalid {
+  border-color: var(--alarm);
+}
+
+.sun-readout {
+  color: var(--gel-cyan);
+}
+
+/* ---- Shader editor ---- */
+
+.shader-editor {
+  position: absolute;
+  left: calc(var(--inset) + 248px + 8px);
+  top: var(--inset);
+  width: 460px;
+  max-width: calc(100vw - 640px);
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.editor-head .section-title {
+  margin: 0;
+}
+
+.glsl-text {
+  width: 100%;
+  height: 46vh;
+  resize: vertical;
+  background: var(--void);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: var(--paper);
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+
+.glsl-text:focus {
+  outline: 1px solid var(--tungsten);
+  outline-offset: 0;
+}
+
+.compile-bar {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--haze);
+  min-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compile-bar.error {
+  color: var(--alarm);
+}
+
 /* ---- Help ---- */
 
 .help-backdrop {

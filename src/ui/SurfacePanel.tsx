@@ -1,4 +1,4 @@
-import type { BlendMode } from '../model/types';
+import type { BlendMode, WarpType } from '../model/types';
 import { parseParamSpecs } from '../model/annotations';
 import { GRADIENT_BODY, SOLID_BODY } from '../content/shaders';
 import { useAppStore } from '../store/store';
@@ -27,6 +27,8 @@ export function SurfacePanel(): React.ReactElement | null {
   const outW = useAppStore((s) => s.project.meta.outputWidth);
   const outH = useAppStore((s) => s.project.meta.outputHeight);
   const setCorner = useAppStore((s) => s.setCorner);
+  const setWarpType = useAppStore((s) => s.setWarpType);
+  const setMeshGrid = useAppStore((s) => s.setMeshGrid);
   const setSurfaceOpacity = useAppStore((s) => s.setSurfaceOpacity);
   const setSurfaceBlend = useAppStore((s) => s.setSurfaceBlend);
   const setSourceParam = useAppStore((s) => s.setSourceParam);
@@ -82,7 +84,32 @@ export function SurfacePanel(): React.ReactElement | null {
         onChange={(v) => setSurfaceBlend(surface.id, v)}
       />
 
-      {corner && selectedHandle != null && (
+      <div className="subsection-title">Warp</div>
+      <SelectField
+        label="Type"
+        value={surface.warp.type}
+        options={[
+          { value: 'cornerPin' as WarpType, label: 'Corner pin' },
+          { value: 'mesh' as WarpType, label: 'Mesh' },
+        ]}
+        onChange={(v) => setWarpType(surface.id, v)}
+      />
+      {surface.warp.type === 'mesh' && surface.warp.mesh && (
+        <SelectField
+          label="Grid"
+          value={`${surface.warp.mesh.cols}`}
+          options={[
+            { value: '2', label: '2 × 2' },
+            { value: '3', label: '3 × 3' },
+            { value: '4', label: '4 × 4' },
+            { value: '6', label: '6 × 6' },
+            { value: '8', label: '8 × 8' },
+          ]}
+          onChange={(v) => setMeshGrid(surface.id, Number(v), Number(v))}
+        />
+      )}
+
+      {surface.warp.type === 'cornerPin' && corner && selectedHandle != null && (
         <>
           <div className="subsection-title">{CORNER_NAMES[selectedHandle]}</div>
           <NumberField

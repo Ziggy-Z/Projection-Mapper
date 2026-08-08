@@ -63,7 +63,7 @@ export function useKeyboard(): void {
         if (s.selectedSurfaceId == null || s.selectedHandle == null) return;
         e.preventDefault();
         const scale = e.shiftKey ? 10 : e.altKey ? 0.1 : 1;
-        s.nudgeCorner(s.selectedSurfaceId, s.selectedHandle, dx * scale, dy * scale);
+        s.nudgeHandle(s.selectedSurfaceId, s.selectedHandle, dx * scale, dy * scale);
       };
 
       if (/^[1-9]$/.test(e.key)) {

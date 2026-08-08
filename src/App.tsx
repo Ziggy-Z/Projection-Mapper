@@ -8,6 +8,9 @@ import { SurfaceListPanel } from './ui/SurfaceListPanel';
 import { SurfacePanel } from './ui/SurfacePanel';
 import { SourcesPanel } from './ui/SourcesPanel';
 import { OutputPanel } from './ui/OutputPanel';
+import { ScenesPanel } from './ui/ScenesPanel';
+import { SchedulePanel } from './ui/SchedulePanel';
+import { ShaderEditor } from './ui/ShaderEditor';
 import { FaderRail } from './ui/FaderRail';
 import { HelpOverlay } from './ui/HelpOverlay';
 import { Countdown } from './ui/Countdown';
@@ -45,8 +48,11 @@ export function App(): React.ReactElement {
         </div>
         <div className="panel-col panel-col-right">
           <SourcesPanel />
+          <ScenesPanel />
+          <SchedulePanel />
           <OutputPanel />
         </div>
+        <ShaderEditor />
         <FaderRail />
         <Countdown />
         <Notice />

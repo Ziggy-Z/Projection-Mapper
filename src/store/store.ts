@@ -4,12 +4,16 @@ import type {
   Master,
   OverlayMode,
   Project,
+  SceneSurfaceState,
+  ScheduleEvent,
   Source,
   SourceParamValue,
   Surface,
   Vec2,
+  WarpType,
 } from '../model/types';
 import { createSurface, defaultProject, newId } from '../model/defaults';
+import { meshFromCorners } from '../gl/mesh';
 
 export type Mode = 'show' | 'edit';
 
@@ -108,6 +112,29 @@ export interface AppState {
   moveMaskPoint(index: number, uv: Vec2): void;
   insertMaskPoint(afterIndex: number, uv: Vec2): void;
   deleteMaskPoint(index: number): void;
+
+  /** Direct project patch with no undo entry — for transitions/scheduler. */
+  applyProjectPatch(fn: (p: Project) => Project): void;
+
+  setWarpType(surfaceId: string, type: WarpType): void;
+  setMeshGrid(surfaceId: string, cols: number, rows: number): void;
+  setMeshPoint(surfaceId: string, index: number, pos: Vec2): void;
+  /** Nudges a corner or mesh point depending on the surface's warp type. */
+  nudgeHandle(surfaceId: string, index: number, dxPx: number, dyPx: number): void;
+
+  captureScene(name: string): void;
+  updateScene(id: string): void;
+  deleteScene(id: string): void;
+  renameScene(id: string, name: string): void;
+
+  setScheduleEnabled(enabled: boolean): void;
+  setScheduleLocation(lat: number, lon: number): void;
+  addScheduleEvent(): void;
+  updateScheduleEvent(index: number, patch: Partial<ScheduleEvent>): void;
+  deleteScheduleEvent(index: number): void;
+
+  shaderEditorId: string | null;
+  setShaderEditor(id: string | null): void;
 
   undo(): void;
   redo(): void;
@@ -466,6 +493,168 @@ export const useAppStore = create<AppState>()((set, get) => {
       patchMaskPoints((pts) => pts.filter((_, i) => i !== index));
       set((s) => (s.maskEdit ? { maskEdit: { ...s.maskEdit, selectedPoint: null } } : s));
     },
+
+    applyProjectPatch: (fn) => patchProject(fn),
+
+    setWarpType: (surfaceId, type) => {
+      const srf = get().project.surfaces.find((x) => x.id === surfaceId);
+      if (!srf || srf.warp.type === type) return;
+      if (type === 'mesh') {
+        const mesh =
+          srf.warp.mesh && srf.warp.mesh.points.length === (srf.warp.mesh.cols + 1) * (srf.warp.mesh.rows + 1)
+            ? srf.warp.mesh
+            : meshFromCorners(srf.warp.corners, 4, 4);
+        if (!mesh) return;
+        editSurface(surfaceId, (x) => ({ ...x, warp: { ...x.warp, type, mesh } }));
+      } else {
+        editSurface(surfaceId, (x) => ({ ...x, warp: { ...x.warp, type } }));
+      }
+      set({ selectedHandle: null });
+    },
+    setMeshGrid: (surfaceId, cols, rows) => {
+      const srf = get().project.surfaces.find((x) => x.id === surfaceId);
+      if (!srf) return;
+      const mesh = meshFromCorners(srf.warp.corners, cols, rows);
+      if (!mesh) return;
+      editSurface(surfaceId, (x) => ({ ...x, warp: { ...x.warp, mesh } }));
+      set({ selectedHandle: null });
+    },
+    setMeshPoint: (surfaceId, index, pos) =>
+      patchSurface(surfaceId, (srf) => {
+        if (!srf.warp.mesh) return srf;
+        return {
+          ...srf,
+          warp: {
+            ...srf.warp,
+            mesh: {
+              ...srf.warp.mesh,
+              points: srf.warp.mesh.points.map((p, i) =>
+                i === index ? clampCorner(pos) : p,
+              ),
+            },
+          },
+        };
+      }),
+    nudgeHandle: (surfaceId, index, dxPx, dyPx) => {
+      const s = get();
+      const srf = s.project.surfaces.find((x) => x.id === surfaceId);
+      if (!srf) return;
+      const dx = dxPx / s.project.meta.outputWidth;
+      const dy = dyPx / s.project.meta.outputHeight;
+      if (srf.warp.type === 'mesh' && srf.warp.mesh) {
+        const p = srf.warp.mesh.points[index];
+        if (!p) return;
+        pushCoalesced(`handle:${surfaceId}:${index}`);
+        get().setMeshPoint(surfaceId, index, [p[0] + dx, p[1] + dy]);
+      } else {
+        const c = srf.warp.corners[index];
+        if (!c) return;
+        pushCoalesced(`handle:${surfaceId}:${index}`);
+        get().setCorner(surfaceId, index, [c[0] + dx, c[1] + dy]);
+      }
+    },
+
+    captureScene: (name) => {
+      pushUndo(get().project, null);
+      const p = get().project;
+      const surfaceStates: Record<string, SceneSurfaceState> = {};
+      for (const srf of p.surfaces) {
+        surfaceStates[srf.id] = {
+          sourceId: srf.sourceId,
+          opacity: srf.opacity,
+          enabled: srf.enabled,
+          sourceParams: { ...srf.sourceParams },
+        };
+      }
+      patchProject((pr) => ({
+        ...pr,
+        scenes: [
+          ...pr.scenes,
+          { id: newId('scn'), name, surfaceStates, master: { ...p.master } },
+        ],
+      }));
+    },
+    updateScene: (id) => {
+      pushUndo(get().project, null);
+      const p = get().project;
+      const surfaceStates: Record<string, SceneSurfaceState> = {};
+      for (const srf of p.surfaces) {
+        surfaceStates[srf.id] = {
+          sourceId: srf.sourceId,
+          opacity: srf.opacity,
+          enabled: srf.enabled,
+          sourceParams: { ...srf.sourceParams },
+        };
+      }
+      patchProject((pr) => ({
+        ...pr,
+        scenes: pr.scenes.map((sc) =>
+          sc.id === id ? { ...sc, surfaceStates, master: { ...p.master } } : sc,
+        ),
+      }));
+    },
+    deleteScene: (id) => {
+      pushUndo(get().project, null);
+      patchProject((pr) => ({ ...pr, scenes: pr.scenes.filter((x) => x.id !== id) }));
+    },
+    renameScene: (id, name) => {
+      pushCoalesced(`scnname:${id}`);
+      patchProject((pr) => ({
+        ...pr,
+        scenes: pr.scenes.map((x) => (x.id === id ? { ...x, name } : x)),
+      }));
+    },
+
+    setScheduleEnabled: (enabled) => {
+      pushCoalesced('schedule.enabled');
+      patchProject((pr) => ({ ...pr, schedule: { ...pr.schedule, enabled } }));
+    },
+    setScheduleLocation: (lat, lon) => {
+      pushCoalesced('schedule.location');
+      patchProject((pr) => ({ ...pr, schedule: { ...pr.schedule, location: { lat, lon } } }));
+    },
+    addScheduleEvent: () => {
+      pushUndo(get().project, null);
+      const firstScene = get().project.scenes[0];
+      patchProject((pr) => ({
+        ...pr,
+        schedule: {
+          ...pr.schedule,
+          events: [
+            ...pr.schedule.events,
+            {
+              at: 'sunset-00:30',
+              action: firstScene ? 'fadeToScene' : 'fadeToBlack',
+              sceneId: firstScene?.id,
+              durationSec: 60,
+            },
+          ],
+        },
+      }));
+    },
+    updateScheduleEvent: (index, patch) => {
+      pushCoalesced(`schedevent:${index}`);
+      patchProject((pr) => ({
+        ...pr,
+        schedule: {
+          ...pr.schedule,
+          events: pr.schedule.events.map((ev, i) => (i === index ? { ...ev, ...patch } : ev)),
+        },
+      }));
+    },
+    deleteScheduleEvent: (index) => {
+      pushUndo(get().project, null);
+      patchProject((pr) => ({
+        ...pr,
+        schedule: {
+          ...pr.schedule,
+          events: pr.schedule.events.filter((_, i) => i !== index),
+        },
+      }));
+    },
+
+    shaderEditorId: null,
+    setShaderEditor: (shaderEditorId) => set({ shaderEditorId }),
 
     undo: () => {
       const s = get();
