@@ -28,18 +28,27 @@ export function HelpOverlay(): React.ReactElement | null {
   if (!open) return null;
   return (
     <div className="help-backdrop" onClick={() => setHelpOpen(false)}>
-      <section className="panel help-panel" onClick={(e) => e.stopPropagation()}>
-        <h2 className="section-title">Keyboard</h2>
-        <table className="help-table">
-          <tbody>
-            {KEYS.map(([key, action]) => (
-              <tr key={key}>
-                <td className="mono help-key">{key}</td>
-                <td>{action}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <section className="panel floating help-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="panel-body">
+          <h2 className="section-title">Keyboard</h2>
+          <table className="help-table">
+            <tbody>
+              {KEYS.map(([key, action]) => (
+                <tr key={key}>
+                  <td className="help-key">
+                    {key.split(' / ').map((k, i) => (
+                      <span key={k}>
+                        {i > 0 && ' / '}
+                        <kbd>{k}</kbd>
+                      </span>
+                    ))}
+                  </td>
+                  <td>{action}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

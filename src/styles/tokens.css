@@ -1,19 +1,88 @@
+/*
+ * Studio-dark design tokens.
+ *
+ * Two accents, never interchanged:
+ *   --accent (cool blue)  interactive — selection, focus, controls you drive
+ *   --live   (amber)      output is hot — master, on-canvas handles, warp
+ *
+ * The `--void/--paper/--haze/--rule/--tungsten/--gel-cyan` aliases at the
+ * bottom are the original semantic names; the SVG overlay layers still speak
+ * them, so they are mapped here rather than renamed at every call site.
+ */
+
 :root {
-  /* Theatrical lighting palette — amber marks what you touch, cyan marks
-     what the system tells you. Never interchange them. */
-  --void: #0b0d12;
-  --panel: #131722;
-  --well: #1c2230;
-  --rule: #2a3243;
-  --haze: #7c8798;
-  --paper: #e6e9ef;
-  --tungsten: #f2a93b;
-  --gel-cyan: #4fd1e0;
-  --alarm: #e2564b;
+  /* ---- Surfaces (darkest to lightest) ---- */
+  --bg-0: #0a0b0d; /* behind the output, letterbox */
+  --bg-1: #131519; /* rail / panel body */
+  --bg-2: #1b1e24; /* input wells, hovered rows */
+  --bg-3: #242832; /* pressed, raised controls */
 
-  --font-ui: 'Archivo', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --line: #262a32; /* hairline dividers, control borders */
+  --line-strong: #363c48; /* hover borders */
 
-  --panel-bg: rgba(19, 23, 34, 0.92);
+  /* ---- Text ---- */
+  --text: #e8eaee;
+  --text-dim: #8a929f;
+  --text-faint: #5b6472;
+
+  /* ---- Accents ---- */
+  --accent: #4c8dff;
+  --accent-hot: #6ba2ff;
+  --accent-wash: rgba(76, 141, 255, 0.14);
+  --accent-edge: rgba(76, 141, 255, 0.42);
+
+  --live: #f2a93b;
+  --live-hot: #ffc061;
+  --live-wash: rgba(242, 169, 59, 0.14);
+
+  --alarm: #ff5c5c;
+  --ok: #3dd68c;
+
+  /* ---- Type ---- */
+  /* Both families are self-hosted via @fontsource (see main.tsx) — Archivo at
+     400/500/600 and JetBrains Mono at 400/500. Stay on those weights so
+     nothing gets synthesised. */
+  --font-ui: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', monospace;
+
+  --fs-label: 11px; /* field labels, muted */
+  --fs-body: 12px; /* buttons, list rows */
+  --fs-value: 12px; /* numeric readouts */
+  --fs-title: 10px; /* section headers, tracked out */
+
+  /* ---- Geometry ---- */
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 10px;
+  --r-pill: 999px;
+
+  --row-h: 28px;
+  --field-w: 112px;
+  --rail-w: 292px;
+  --topbar-h: 44px;
+  --statusbar-h: 26px;
+  --pad: 12px;
+
+  /* ---- Elevation ---- */
+  --edge-top: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --shadow-well: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-rail: 0 0 40px rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 16px 48px rgba(0, 0, 0, 0.62), 0 0 0 1px var(--line);
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 110ms;
+
+  /* ---- Aliases kept for the canvas overlay layers ---- */
+  --void: var(--bg-0);
+  --panel: var(--bg-1);
+  --well: var(--bg-2);
+  --rule: var(--line);
+  --haze: var(--text-dim);
+  --paper: var(--text);
+  --tungsten: var(--live);
+  --gel-cyan: var(--accent);
+
+  --panel-bg: rgba(19, 21, 25, 0.86);
   --inset: 12px;
 }

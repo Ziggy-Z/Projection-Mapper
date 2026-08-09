@@ -3,6 +3,7 @@ import type { ScheduleEvent } from '../model/types';
 import { isValidEventTime, sunTimes } from '../model/sun';
 import { useAppStore } from '../store/store';
 import { NumberField } from './controls/NumberField';
+import { Panel } from './controls/Panel';
 import { IconButton, IconCross, IconPlus, SelectField, Toggle } from './controls/common';
 
 function fmtTime(d: Date | null): string {
@@ -24,8 +25,11 @@ export function SchedulePanel(): React.ReactElement {
   const today = sunTimes(new Date(), schedule.location.lat, schedule.location.lon);
 
   return (
-    <section className="panel panel-schedule">
-      <h2 className="section-title">Schedule</h2>
+    <Panel
+      id="schedule"
+      title="Schedule"
+      note={schedule.enabled ? `${schedule.events.length} cue${schedule.events.length === 1 ? '' : 's'}` : 'off'}
+    >
       <div className="numfield">
         <span className="nf-label">Enabled</span>
         <Toggle checked={schedule.enabled} onChange={setScheduleEnabled} />
@@ -72,7 +76,7 @@ export function SchedulePanel(): React.ReactElement {
       <div className="panel-hint">
         Times: 23:30, sunset-00:30, sunrise+01:00. Each fires once per day.
       </div>
-    </section>
+    </Panel>
   );
 }
 
