@@ -10,5 +10,10 @@ export function Notice(): React.ReactElement | null {
     return () => window.clearTimeout(id);
   }, [notice, setNotice]);
   if (notice == null) return null;
-  return <div className="notice">{notice}</div>;
+  return (
+    <div className="notice" role="status">
+      <span className="status-dot" />
+      {notice}
+    </div>
+  );
 }

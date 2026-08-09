@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAppStore } from '../store/store';
-import { getRenderer } from '../runtime';
 import { remoteEnabled, setRemoteEnabled } from '../remote';
 import { NumberField } from './controls/NumberField';
+import { Panel } from './controls/Panel';
 import { Toggle } from './controls/common';
 
 export function OutputPanel(): React.ReactElement {
@@ -10,19 +10,10 @@ export function OutputPanel(): React.ReactElement {
   const setMaster = useAppStore((s) => s.setMaster);
   const beginGesture = useAppStore((s) => s.beginGesture);
   const endGesture = useAppStore((s) => s.endGesture);
-  const [drops, setDrops] = useState(0);
   const [remote, setRemote] = useState(remoteEnabled);
 
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setDrops(getRenderer()?.stats.dropEvents ?? 0);
-    }, 2000);
-    return () => window.clearInterval(id);
-  }, []);
-
   return (
-    <section className="panel panel-output">
-      <h2 className="section-title">Output</h2>
+    <Panel id="output" title="Output">
       <NumberField
         label="Gamma"
         value={master.gamma}
@@ -75,12 +66,6 @@ export function OutputPanel(): React.ReactElement {
           }}
         />
       </div>
-      {drops > 0 && (
-        <div className="panel-hint">
-          Frame drops logged: <span className="mono drop-count">{drops}</span>
-          {' '}(see <span className="mono">__pm.renderer.watchdogLog</span>)
-        </div>
-      )}
-    </section>
+    </Panel>
   );
 }

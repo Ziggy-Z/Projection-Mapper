@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAppStore } from '../store/store';
 import { startSceneTransition } from '../store/transitions';
 import { NumberField } from './controls/NumberField';
+import { Panel } from './controls/Panel';
 import { IconButton, IconCross, IconPlus } from './controls/common';
 
 /** Named looks with timed crossfades — cues, in desk terms. */
@@ -16,8 +17,7 @@ export function ScenesPanel(): React.ReactElement {
   const [draft, setDraft] = useState('');
 
   return (
-    <section className="panel panel-scenes">
-      <h2 className="section-title">Scenes</h2>
+    <Panel id="scenes" title="Scenes" note={scenes.length || undefined}>
       {scenes.length === 0 && (
         <div className="panel-hint">
           No scenes yet — set the look you want, then capture it.
@@ -96,6 +96,6 @@ export function ScenesPanel(): React.ReactElement {
       >
         <IconPlus /> Capture scene
       </button>
-    </section>
+    </Panel>
   );
 }

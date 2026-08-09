@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { Source } from '../model/types';
 import { useAppStore } from '../store/store';
 import { newId } from '../model/defaults';
@@ -7,7 +7,9 @@ import { parseParamSpecs, specDefaults } from '../model/annotations';
 import { BUILTIN_SHADERS, GRADIENT_BODY, SOLID_BODY } from '../content/shaders';
 import { putMedia } from '../store/media';
 import { exportSourceSnippet } from '../store/persistence';
-import { IconButton, IconCross } from './controls/common';
+import { Panel } from './controls/Panel';
+import { Popover } from './controls/Popover';
+import { IconButton, IconCross, IconPlus } from './controls/common';
 
 function pickFile(accept: string, onFile: (f: File) => void): void {
   const input = document.createElement('input');
@@ -31,7 +33,8 @@ export function SourcesPanel(): React.ReactElement {
   const setNotice = useAppStore((s) => s.setNotice);
   const setShaderEditor = useAppStore((s) => s.setShaderEditor);
   const shaderEditorId = useAppStore((s) => s.shaderEditorId);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const closeMenu = useCallback(() => setMenuAnchor(null), []);
 
   const addMedia = (type: 'image' | 'video'): void => {
     pickFile(type === 'image' ? 'image/*' : 'video/*', (file) => {
@@ -48,12 +51,12 @@ export function SourcesPanel(): React.ReactElement {
         })
         .catch(() => setNotice('Could not store the media file.'));
     });
-    setMenuOpen(false);
+    closeMenu();
   };
 
   const addShader = (name: string, glsl: string): void => {
     addSource(createShaderSource(name, glsl), { assignToSelected: true });
-    setMenuOpen(false);
+    closeMenu();
   };
 
   const addSimple = (type: 'solid' | 'gradient'): void => {
@@ -65,12 +68,11 @@ export function SourcesPanel(): React.ReactElement {
       uniforms: specDefaults(parseParamSpecs(body)),
     };
     addSource(source, { assignToSelected: true });
-    setMenuOpen(false);
+    closeMenu();
   };
 
   return (
-    <section className="panel panel-sources">
-      <h2 className="section-title">Sources</h2>
+    <Panel id="sources" title="Sources" note={sources.length || undefined}>
       {sources.length === 0 && (
         <div className="panel-hint">No sources yet — add one below.</div>
       )}
@@ -121,41 +123,43 @@ export function SourcesPanel(): React.ReactElement {
           </div>
         ))}
       </div>
-      <div className="add-menu-host">
-        <button type="button" className="btn add-btn" onClick={() => setMenuOpen(!menuOpen)}>
-          Add source
+      <button
+        type="button"
+        className="btn add-btn"
+        aria-haspopup="menu"
+        aria-expanded={menuAnchor != null}
+        onClick={(e) => setMenuAnchor(menuAnchor ? null : e.currentTarget)}
+      >
+        <IconPlus /> Add source
+      </button>
+      <Popover anchor={menuAnchor} onClose={closeMenu} className="add-menu">
+        <div className="add-menu-group">Shaders</div>
+        {BUILTIN_SHADERS.map((b) => (
+          <button
+            key={b.name}
+            type="button"
+            className="add-menu-item"
+            onClick={() => addShader(b.name, b.glsl)}
+          >
+            {b.name}
+          </button>
+        ))}
+        <div className="add-menu-group">Media</div>
+        <button type="button" className="add-menu-item" onClick={() => addMedia('image')}>
+          Image…
         </button>
-        {menuOpen && (
-          <div className="add-menu">
-            <div className="add-menu-group">Shaders</div>
-            {BUILTIN_SHADERS.map((b) => (
-              <button
-                key={b.name}
-                type="button"
-                className="add-menu-item"
-                onClick={() => addShader(b.name, b.glsl)}
-              >
-                {b.name}
-              </button>
-            ))}
-            <div className="add-menu-group">Media</div>
-            <button type="button" className="add-menu-item" onClick={() => addMedia('image')}>
-              Image…
-            </button>
-            <button type="button" className="add-menu-item" onClick={() => addMedia('video')}>
-              Video (loop)…
-            </button>
-            <div className="add-menu-group">Flat</div>
-            <button type="button" className="add-menu-item" onClick={() => addSimple('solid')}>
-              Solid
-            </button>
-            <button type="button" className="add-menu-item" onClick={() => addSimple('gradient')}>
-              Gradient
-            </button>
-          </div>
-        )}
-      </div>
+        <button type="button" className="add-menu-item" onClick={() => addMedia('video')}>
+          Video (loop)…
+        </button>
+        <div className="add-menu-group">Flat</div>
+        <button type="button" className="add-menu-item" onClick={() => addSimple('solid')}>
+          Solid
+        </button>
+        <button type="button" className="add-menu-item" onClick={() => addSimple('gradient')}>
+          Gradient
+        </button>
+      </Popover>
       <div className="panel-hint">Click a source to assign it to the selected surface.</div>
-    </section>
+    </Panel>
   );
 }

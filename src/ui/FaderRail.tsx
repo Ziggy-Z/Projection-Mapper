@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useAppStore } from '../store/store';
-import { getRenderer } from '../runtime';
 
 /**
- * The grand master fader, permanently docked at the right edge: vertical
- * travel, tungsten cap, 10% tick scale, BLACKOUT beneath, frame time below.
+ * The grand master, docked at the foot of the right rail: vertical travel,
+ * lit track, 10% tick scale, BLACKOUT alongside.
  */
 export function FaderRail(): React.ReactElement {
   const brightness = useAppStore((s) => s.project.master.brightness);
@@ -48,6 +47,8 @@ export function FaderRail(): React.ReactElement {
     nudgeMasterBrightness(dir * step);
   };
 
+  const pct = Math.round(brightness * 100);
+
   return (
     <div className="fader-rail">
       <div className="rail-title">Master</div>
@@ -59,13 +60,15 @@ export function FaderRail(): React.ReactElement {
         aria-label="Grand master"
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round(brightness * 100)}
+        aria-valuenow={pct}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onKeyDown={onKeyDown}
       >
-        <div className="fader-groove" />
+        <div className="fader-groove">
+          <div className="fader-fill" style={{ height: `${brightness * 100}%` }} />
+        </div>
         <div className="fader-ticks">
           {Array.from({ length: 11 }, (_, i) => (
             <div
@@ -77,7 +80,10 @@ export function FaderRail(): React.ReactElement {
         </div>
         <div className="fader-cap" style={{ top: `${(1 - brightness) * 100}%` }} />
       </div>
-      <div className="fader-percent">{Math.round(brightness * 100)}</div>
+      <div className="fader-readout">
+        <span className="fader-percent">{pct}</span>
+        <span className="fader-unit">%</span>
+      </div>
       <button
         type="button"
         className={blackout ? 'blackout-btn active' : 'blackout-btn'}
@@ -85,18 +91,6 @@ export function FaderRail(): React.ReactElement {
       >
         Blackout
       </button>
-      <FrameReadout />
     </div>
   );
-}
-
-function FrameReadout(): React.ReactElement {
-  const [ms, setMs] = useState(0);
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setMs(getRenderer()?.stats.frameMs ?? 0);
-    }, 500);
-    return () => window.clearInterval(id);
-  }, []);
-  return <div className="frame-readout">{ms.toFixed(1)} ms</div>;
 }

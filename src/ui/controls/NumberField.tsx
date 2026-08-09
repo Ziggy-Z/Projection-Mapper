@@ -37,6 +37,11 @@ export function NumberField(p: NumberFieldProps): React.ReactElement {
   const clamp = (v: number): number => Math.min(max, Math.max(min, v));
   const fmt = (v: number): string => v.toFixed(decimals);
 
+  // A bounded field draws its position as a fill behind the number; an
+  // unbounded one stays a plain well.
+  const bounded = Number.isFinite(min) && Number.isFinite(max) && max > min;
+  const fill = bounded ? `${(clamp(p.value) - min) * (100 / (max - min))}%` : undefined;
+
   const applyOnce = (v: number): void => {
     p.onGestureStart?.();
     p.onChange(clamp(v));
@@ -121,18 +126,23 @@ export function NumberField(p: NumberFieldProps): React.ReactElement {
       ) : (
         <span
           className="nf-value"
+          style={fill != null ? ({ '--fill': fill } as React.CSSProperties) : undefined}
           tabIndex={0}
           role="spinbutton"
           aria-label={p.label}
           aria-valuenow={p.value}
+          aria-valuemin={bounded ? min : undefined}
+          aria-valuemax={bounded ? max : undefined}
           title="Drag to scrub, click to type, Alt+click to reset"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onKeyDown={onKeyDown}
         >
-          {fmt(p.value)}
-          {p.suffix}
+          <span>
+            {fmt(p.value)}
+            {p.suffix}
+          </span>
         </span>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '../store/store';
+import { Panel } from './controls/Panel';
 import {
   IconButton,
   IconChevronDown,
@@ -24,8 +25,7 @@ export function SurfaceListPanel(): React.ReactElement {
   const [draft, setDraft] = useState('');
 
   return (
-    <section className="panel panel-surfaces">
-      <h2 className="section-title">Surfaces</h2>
+    <Panel id="surfaces" title="Surfaces" note={surfaces.length || undefined}>
       {surfaces.length === 0 && (
         <div className="panel-hint">No surfaces yet — press N to add one.</div>
       )}
@@ -114,6 +114,6 @@ export function SurfaceListPanel(): React.ReactElement {
       <button type="button" className="btn add-btn" onClick={addSurface}>
         <IconPlus /> New surface
       </button>
-    </section>
+    </Panel>
   );
 }

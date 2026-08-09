@@ -3,7 +3,8 @@ import { useAppStore } from './store/store';
 import { CanvasHost } from './ui/CanvasHost';
 import { HandlesLayer } from './ui/HandlesLayer';
 import { MaskLayer } from './ui/MaskLayer';
-import { ProjectPanel } from './ui/ProjectPanel';
+import { TopBar } from './ui/TopBar';
+import { StatusBar } from './ui/StatusBar';
 import { SurfaceListPanel } from './ui/SurfaceListPanel';
 import { SurfacePanel } from './ui/SurfacePanel';
 import { SourcesPanel } from './ui/SourcesPanel';
@@ -37,23 +38,31 @@ export function App(): React.ReactElement {
     <>
       <CanvasHost />
       <div
+        id="chrome"
         className={`chrome${mode === 'show' ? ' hidden' : ''}${dim ? ' dim' : ''}`}
       >
         <HandlesLayer />
         <MaskLayer />
-        <div className="panel-col panel-col-left">
-          <ProjectPanel />
-          <SurfaceListPanel />
-          <SurfacePanel />
-        </div>
-        <div className="panel-col panel-col-right">
-          <SourcesPanel />
-          <ScenesPanel />
-          <SchedulePanel />
-          <OutputPanel />
-        </div>
+        <TopBar />
+        <aside className="rail rail-left">
+          <div className="rail-scroll">
+            <SurfaceListPanel />
+            <SurfacePanel />
+          </div>
+        </aside>
+        <aside className="rail rail-right">
+          <div className="rail-scroll">
+            <SourcesPanel />
+            <ScenesPanel />
+            <SchedulePanel />
+            <OutputPanel />
+          </div>
+          <div className="rail-foot">
+            <FaderRail />
+          </div>
+        </aside>
         <ShaderEditor />
-        <FaderRail />
+        <StatusBar />
         <Countdown />
         <Notice />
         <HelpOverlay />

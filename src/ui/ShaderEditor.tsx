@@ -60,22 +60,25 @@ export function ShaderEditor(): React.ReactElement | null {
   };
 
   return (
-    <section className="panel shader-editor">
+    <section className="panel floating shader-editor">
       <div className="editor-head">
         <h2 className="section-title">{source.name}</h2>
         <button type="button" className="btn mini" onClick={() => setShaderEditor(null)}>
           Close
         </button>
       </div>
-      <textarea
-        className="glsl-text mono"
-        spellCheck={false}
-        value={text}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => e.stopPropagation()}
-      />
-      <div className={error ? 'compile-bar error' : 'compile-bar'}>
-        {error ? error.split('\n')[0] : 'Compiled'}
+      <div className="editor-body">
+        <textarea
+          className="glsl-text mono"
+          spellCheck={false}
+          value={text}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => e.stopPropagation()}
+        />
+        <div className={error ? 'compile-bar error' : 'compile-bar'}>
+          <span className="status-dot" />
+          {error ? error.split('\n')[0] : 'Compiled'}
+        </div>
       </div>
     </section>
   );

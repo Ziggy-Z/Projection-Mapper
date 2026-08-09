@@ -5,6 +5,7 @@ import { GRADIENT_BODY, SOLID_BODY } from '../content/shaders';
 import { useAppStore } from '../store/store';
 import { NumberField } from './controls/NumberField';
 import { ParamControls } from './controls/ParamControls';
+import { Panel } from './controls/Panel';
 import { IconButton, IconCross, IconPlus, SelectField, Toggle } from './controls/common';
 
 const CORNER_NAMES = ['Top left', 'Top right', 'Bottom right', 'Bottom left'];
@@ -58,12 +59,7 @@ export function SurfacePanel(): React.ReactElement | null {
   const mergedParams = { ...source?.uniforms, ...surface.sourceParams };
 
   return (
-    <section className="panel panel-surface">
-      <h2 className="section-title">Surface</h2>
-      <div className="meta-row">
-        <span className="meta-label">Name</span>
-        <span>{surface.name}</span>
-      </div>
+    <Panel id="surface" title="Surface" note={surface.name}>
       <NumberField
         label="Opacity"
         value={surface.opacity * 100}
@@ -216,6 +212,6 @@ export function SurfacePanel(): React.ReactElement | null {
       >
         Export surface
       </button>
-    </section>
+    </Panel>
   );
 }
