@@ -8,6 +8,7 @@ import { StatusBar } from './ui/StatusBar';
 import { SurfaceListPanel } from './ui/SurfaceListPanel';
 import { SurfacePanel } from './ui/SurfacePanel';
 import { SourcesPanel } from './ui/SourcesPanel';
+import { DisplayPanel } from './ui/DisplayPanel';
 import { OutputPanel } from './ui/OutputPanel';
 import { ScenesPanel } from './ui/ScenesPanel';
 import { SchedulePanel } from './ui/SchedulePanel';
@@ -55,6 +56,7 @@ export function App(): React.ReactElement {
             <SourcesPanel />
             <ScenesPanel />
             <SchedulePanel />
+            <DisplayPanel />
             <OutputPanel />
           </div>
           <div className="rail-foot">

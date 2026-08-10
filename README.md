@@ -4,22 +4,40 @@ Single-projector projection mapping for a permanent wall installation.
 Boots into Show mode (pure output); deliberate mouse movement or `Esc`
 enters Edit mode, which auto-returns to Show after 60s of no input.
 
+A Windows desktop application (Electron). Fully offline — no CDN, no
+network calls except the optional LAN remote you switch on yourself.
+
 ## Run
 
 ```
 npm install
-npm run dev        # development server
-npm run build      # static bundle in dist/ — fully offline, no CDN
+npm run dev        # Vite + Electron, with the main process on tsc --watch
+npm run start      # build, then run the desktop app
+npm run package    # Windows installer + portable exe in release/
 ```
 
-Deployment target is Chromium in kiosk mode pointed at the built bundle,
-for example:
+`npm run dev:web` still serves the renderer alone in a browser, which is
+handy for quick UI work — but the desktop-only features (display
+targeting, native dialogs, LAN remote, keep-awake) are inert there.
 
-```
-chromium --kiosk --noerrdialogs --disable-session-crashed-bubble http://localhost:8080
-```
+## Installation setup
 
-(Serve `dist/` with any static server, or open `dist/index.html` from disk.)
+The **Display** panel is where a deployment gets configured:
+
+- **Output** — pick which physical display is the projector. The window
+  moves there; `Match <w> × <h>` adopts its native resolution as the
+  project's output size.
+- **Fullscreen** — borderless full coverage (`F11`).
+- **Keep display awake** — a real `powerSaveBlocker`, so the projector
+  does not sleep mid-show.
+- **Launch at login** — start the piece when the machine boots.
+
+The window is frameless: drag the top bar to move it, `Ctrl+Q` or the
+power button at the right of the top bar to quit. A renderer or GPU crash
+reloads the window automatically; only one instance can run at a time.
+
+State lives in `%APPDATA%/projection-mapper/`: `project.json` (autosaved),
+`settings.json` (machine config), and `media/` (image and video files).
 
 ## Features
 
@@ -30,8 +48,9 @@ chromium --kiosk --noerrdialogs --disable-session-crashed-bubble http://localhos
 - **Masks** — per-surface polygons in UV space with signed-distance
   feather; union and inverted-cut composition.
 - **Sources** — six built-in ambient shaders, images, looping video
-  (blobs in IndexedDB), solids, gradients. `@param/@color/@toggle`
-  annotations auto-generate per-surface controls.
+  (files on disk, streamed over a `media://` protocol), solids,
+  gradients. `@param/@color/@toggle` annotations auto-generate
+  per-surface controls.
 - **Shader editor** — live GLSL recompile (300ms debounce); a compile
   error keeps the last good program on the wall.
 - **Scenes & schedule** — named looks with timed crossfades; events at
@@ -40,22 +59,16 @@ chromium --kiosk --noerrdialogs --disable-session-crashed-bubble http://localhos
   temperature.
 - **Calibration** — `G` cycles grid / checker / per-surface fill /
   outlines + safe area.
-- **Reliability** — localStorage autosave + recovery screen, WebGL
-  context-loss rebuild, screen wake lock, frame-time watchdog
+- **Reliability** — atomic autosave to disk + recovery screen, WebGL
+  context-loss rebuild, crash reload, frame-time watchdog
   (`__pm.renderer.watchdogLog`).
 
 ## LAN remote (optional)
 
-The core app is fully offline. For phone control on the same network:
-
-```
-node server/remote.mjs
-```
-
-then enable "LAN remote" in the Output panel and open
-`http://<machine>:9270` on a phone — scene selection, grand master,
-blackout. The server is a zero-dependency relay, separate from the
-static bundle.
+Off until you enable it. Switch on "LAN remote" in the Output panel — the
+relay starts inside the app and the panel lists the addresses to open on
+a phone on the same network, for scene selection, grand master and
+blackout. Nothing binds a socket until you ask it to.
 
 ## Keys
 
@@ -65,4 +78,4 @@ Edit/Show, `B` blackout, `G` overlays, `N` new surface, `M` mask edit,
 `Ctrl+S` save, `Ctrl+Z` undo.
 
 Surfaces and sources export as shareable `.json` snippets (Export
-buttons; Import snippet in the Project panel).
+buttons; Import snippet in the top bar).
