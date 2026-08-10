@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/store';
-import { remoteEnabled, setRemoteEnabled } from '../remote';
+import { remoteStatus, setRemoteEnabled } from '../remote';
+import { isDesktop } from '../model/desktop';
 import { NumberField } from './controls/NumberField';
 import { Panel } from './controls/Panel';
 import { Toggle } from './controls/common';
@@ -10,7 +11,17 @@ export function OutputPanel(): React.ReactElement {
   const setMaster = useAppStore((s) => s.setMaster);
   const beginGesture = useAppStore((s) => s.beginGesture);
   const endGesture = useAppStore((s) => s.endGesture);
-  const [remote, setRemote] = useState(remoteEnabled);
+  const [remote, setRemote] = useState(false);
+  const [urls, setUrls] = useState<string[]>([]);
+
+  // The relay lives in the main process, so it — not this component — is the
+  // authority on whether it is actually listening.
+  useEffect(() => {
+    void remoteStatus().then((s) => {
+      setRemote(s.running);
+      setUrls(s.urls);
+    });
+  }, []);
 
   return (
     <Panel id="output" title="Output">
@@ -55,17 +66,40 @@ export function OutputPanel(): React.ReactElement {
         onChange={(v) => setMaster({ temperature: v }, 'master.temperature')}
       />
       <div className="numfield">
-        <span className="nf-label" title="Needs server/remote.mjs running on this machine">
+        <span
+          className="nf-label"
+          title={
+            isDesktop
+              ? 'Serve a phone-sized remote to this machine’s network'
+              : 'Desktop build only'
+          }
+        >
           LAN remote
         </span>
         <Toggle
           checked={remote}
           onChange={(v) => {
             setRemote(v);
-            setRemoteEnabled(v);
+            void setRemoteEnabled(v).then(setUrls);
           }}
         />
       </div>
+      {remote && urls.length > 0 && (
+        <div className="remote-urls">
+          {urls.map((u) => (
+            <div key={u} className="mono remote-url" title="Open this on a phone on the same network">
+              {u}
+            </div>
+          ))}
+        </div>
+      )}
+      {remote && urls.length === 0 && (
+        <div className="panel-hint">
+          {isDesktop
+            ? 'Could not start — port 9270 may already be in use.'
+            : 'The LAN remote needs the desktop build.'}
+        </div>
+      )}
     </Panel>
   );
 }

@@ -1,0 +1,34 @@
+appId: com.ziggyz.projection-mapper
+productName: Projection Mapper
+copyright: Copyright © 2026
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+# No native modules — asar keeps the install tidy and the app self-contained.
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Projection Mapper
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}

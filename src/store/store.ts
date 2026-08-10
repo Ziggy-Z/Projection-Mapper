@@ -82,6 +82,7 @@ export interface AppState {
   nudgeMasterBrightness(delta: number): void;
   setMaster(patch: Partial<Master>, undoKey: string): void;
   setProjectName(name: string): void;
+  setOutputSize(width: number, height: number): void;
 
   addSurface(): void;
   duplicateSurface(id: string): void;
@@ -297,6 +298,21 @@ export const useAppStore = create<AppState>()((set, get) => {
     setProjectName: (name) => {
       pushCoalesced('meta.name');
       patchProject((p) => ({ ...p, meta: { ...p.meta, name } }));
+    },
+    /** Corners are normalised, so changing the output size restretches the
+     * mapping rather than invalidating it. */
+    setOutputSize: (width, height) => {
+      if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+      if (width <= 0 || height <= 0) return;
+      pushUndo(get().project, null);
+      patchProject((p) => ({
+        ...p,
+        meta: {
+          ...p.meta,
+          outputWidth: Math.round(width),
+          outputHeight: Math.round(height),
+        },
+      }));
     },
 
     addSurface: () => {

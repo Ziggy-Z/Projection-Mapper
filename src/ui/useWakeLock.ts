@@ -1,13 +1,22 @@
 import { useEffect } from 'react';
+import { desktop } from '../model/desktop';
 
 interface WakeLockLike {
   release: () => Promise<void>;
 }
 
-/** Keeps the display awake while the piece runs. Reacquires after tab
- * visibility changes (the lock is released by the browser on hide). */
+/**
+ * Keeps the display awake while the piece runs. On the desktop this is a real
+ * powerSaveBlocker in the main process, which the OS honours unconditionally;
+ * the browser path below is best-effort and can be refused by energy saver.
+ */
 export function useWakeLock(): void {
   useEffect(() => {
+    // On the desktop the main process owns the blocker: it is restored from
+    // settings at launch and toggled from the Display panel, so it survives
+    // a renderer reload after a crash.
+    if (desktop) return;
+
     let lock: WakeLockLike | null = null;
     let disposed = false;
 

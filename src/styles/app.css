@@ -115,6 +115,20 @@ body.mode-show * {
   flex: 1;
 }
 
+/* The desktop window is borderless, so the bar itself is the title bar.
+   Everything you can actually click has to opt back out. */
+body.is-desktop .topbar {
+  -webkit-app-region: drag;
+}
+
+body.is-desktop .topbar button,
+body.is-desktop .topbar input,
+body.is-desktop .topbar select,
+body.is-desktop .topbar .segmented,
+body.is-desktop .topbar .chip {
+  -webkit-app-region: no-drag;
+}
+
 .app-mark {
   display: flex;
   align-items: center;
@@ -1072,6 +1086,76 @@ body.mode-show * {
 
 .drop-count {
   color: var(--alarm);
+}
+
+/* ---- Display list ---- */
+
+.display-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding: 0 6px;
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+
+.display-row.current {
+  background: var(--live-wash);
+  color: var(--text);
+}
+
+.display-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.display-row.current .display-dot {
+  background: var(--live);
+  box-shadow: 0 0 8px var(--live);
+}
+
+.display-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.display-res {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.display-row.current .display-res {
+  color: var(--live);
+}
+
+/* ---- LAN remote addresses ---- */
+
+.remote-urls {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.remote-url {
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--accent-hot);
+  font-size: 11px;
+  user-select: text;
+  -webkit-user-select: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ============================================================

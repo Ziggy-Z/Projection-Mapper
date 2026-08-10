@@ -1,47 +1,18 @@
+import { desktop } from './model/desktop';
+import type { RemoteCommand } from './model/desktop';
 import { useAppStore } from './store/store';
 import { startSceneTransition } from './store/transitions';
 
 /**
- * Optional connector to the LAN remote relay (server/remote.mjs). Strictly
- * opt-in: nothing here runs unless the user enables it in the Output panel,
- * so the core app stays fully offline. Talks only to this machine's own
- * hostname; EventSource handles reconnection.
+ * Connector to the LAN remote. On the desktop the relay runs inside the main
+ * process, so this talks over IPC — no EventSource, no localhost fetch, no
+ * CORS. Still strictly opt-in: nothing binds a socket until the user turns it
+ * on in the Output panel.
  */
 
-const FLAG_KEY = 'projection-mapper.remote.v1';
-const PORT = 9270;
-
-let es: EventSource | null = null;
+let unsubscribeStore: (() => void) | null = null;
+let unsubscribeIpc: (() => void) | null = null;
 let pushTimer: number | undefined;
-let unsubscribe: (() => void) | null = null;
-
-export function remoteEnabled(): boolean {
-  try {
-    return localStorage.getItem(FLAG_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-export function setRemoteEnabled(on: boolean): void {
-  try {
-    localStorage.setItem(FLAG_KEY, on ? '1' : '0');
-  } catch {
-    /* storage unavailable — stays session-only */
-  }
-  if (on) connect();
-  else disconnect();
-}
-
-function base(): string {
-  return `http://${window.location.hostname || 'localhost'}:${PORT}`;
-}
-
-interface RemoteCommand {
-  type: 'scene' | 'brightness' | 'blackout';
-  sceneId?: string;
-  value?: number | boolean;
-}
 
 function handleCommand(cmd: RemoteCommand): void {
   const s = useAppStore.getState();
@@ -55,14 +26,14 @@ function handleCommand(cmd: RemoteCommand): void {
 }
 
 function pushState(): void {
+  if (!desktop) return;
   const s = useAppStore.getState();
-  const body = JSON.stringify({
+  desktop.remotePush({
     name: s.project.meta.name,
     scenes: s.project.scenes.map((x) => ({ id: x.id, name: x.name })),
     brightness: s.project.master.brightness,
     blackout: s.blackout,
   });
-  void fetch(`${base()}/state`, { method: 'POST', body }).catch(() => undefined);
 }
 
 function schedulePush(): void {
@@ -71,29 +42,43 @@ function schedulePush(): void {
 }
 
 function connect(): void {
+  if (!desktop) return;
   disconnect();
-  es = new EventSource(`${base()}/events?role=app`);
-  es.onmessage = (e) => {
-    try {
-      handleCommand(JSON.parse(e.data) as RemoteCommand);
-    } catch {
-      /* malformed command — ignore */
-    }
-  };
-  es.onopen = () => pushState();
-  unsubscribe = useAppStore.subscribe((state, prev) => {
+  unsubscribeIpc = desktop.onRemoteCommand(handleCommand);
+  unsubscribeStore = useAppStore.subscribe((state, prev) => {
     if (state.project !== prev.project || state.blackout !== prev.blackout) schedulePush();
   });
+  pushState();
 }
 
 function disconnect(): void {
-  es?.close();
-  es = null;
-  unsubscribe?.();
-  unsubscribe = null;
+  unsubscribeIpc?.();
+  unsubscribeIpc = null;
+  unsubscribeStore?.();
+  unsubscribeStore = null;
   window.clearTimeout(pushTimer);
 }
 
+/** Returns the addresses a phone can reach; empty if it failed to start
+ * (most likely the port is already in use). The enabled flag is persisted by
+ * the main process in settings.json, so it survives a reinstall of the page. */
+export async function setRemoteEnabled(on: boolean): Promise<string[]> {
+  if (!desktop) return [];
+  const status = await desktop.remoteSetEnabled(on);
+  if (status.running) connect();
+  else disconnect();
+  return status.urls;
+}
+
+export async function remoteStatus(): Promise<{ running: boolean; urls: string[] }> {
+  if (!desktop) return { running: false, urls: [] };
+  const s = await desktop.remoteStatus();
+  return { running: s.running, urls: s.urls };
+}
+
 export function initRemote(): void {
-  if (remoteEnabled()) connect();
+  if (!desktop) return;
+  void desktop.remoteStatus().then((status) => {
+    if (status.running) connect();
+  });
 }

@@ -128,6 +128,15 @@ export function IconHelp(): React.ReactElement {
   );
 }
 
+export function IconPower(): React.ReactElement {
+  return (
+    <Icon>
+      <path d="M8 2.5v5.5" />
+      <path d="M11.6 4.6a5 5 0 11-7.2 0" />
+    </Icon>
+  );
+}
+
 export function IconButton(props: {
   title: string;
   onClick: () => void;

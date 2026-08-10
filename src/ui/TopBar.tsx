@@ -5,6 +5,7 @@ import {
   saveProjectToFile,
 } from '../store/persistence';
 import { defaultProject } from '../model/defaults';
+import { desktop } from '../model/desktop';
 import {
   IconButton,
   IconDim,
@@ -13,8 +14,28 @@ import {
   IconHandles,
   IconHelp,
   IconOpen,
+  IconPower,
   IconSave,
 } from './controls/common';
+
+/** Desktop only: the window is borderless with no menu bar, so this and
+ * Ctrl+Q are the only ways out. */
+function QuitButton(props: { quit: () => void }): React.ReactElement {
+  return (
+    <>
+      <span className="bar-sep" />
+      <IconButton
+        title="Quit (Ctrl+Q)"
+        danger
+        onClick={() => {
+          if (window.confirm('Quit Projection Mapper? The wall goes dark.')) props.quit();
+        }}
+      >
+        <IconPower />
+      </IconButton>
+    </>
+  );
+}
 
 const OVERLAY_LABEL: Record<string, string> = {
   off: 'Overlays off',
@@ -131,6 +152,7 @@ export function TopBar(): React.ReactElement {
       <IconButton title="Keyboard reference (?)" onClick={() => setHelpOpen(true)}>
         <IconHelp />
       </IconButton>
+      {desktop != null && <QuitButton quit={desktop.quit} />}
     </header>
   );
 }
